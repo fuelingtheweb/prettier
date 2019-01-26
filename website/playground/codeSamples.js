@@ -1,6 +1,7 @@
 export default function(parser) {
   switch (parser) {
-    case "babylon":
+    case "babel":
+    case "babylon": // backward compatibility
       return [
         'function HelloWorld({greeting = "hello", greeted = \'"World"\', silent = false, onMouseOver,}) {',
         "",
@@ -218,7 +219,7 @@ export default function(parser) {
     case "vue":
       return [
         "<template>",
-        "  <p>Templates are not formatted yet ...",
+        "  <p>Templates are formatted as well...",
         "    </p>",
         "</template>",
         "",
@@ -281,6 +282,26 @@ export default function(parser) {
         '  <div   class="body">',
         "            {{   body         }}",
         "</div> </div>"
+      ].join("\n");
+    case "html":
+    case "angular":
+      return [
+        "<!DOCTYPE html>",
+        '<HTML CLASS="no-js mY-ClAsS">',
+        "  <HEAD>",
+        '    <META CHARSET="utf-8">',
+        "    <TITLE>My tITlE</TITLE>",
+        '    <META NAME="description" content="My CoNtEnT">',
+        "  </HEAD>",
+        "  <body>",
+        "    <P>Hello world!<BR> This is HTML5 Boilerplate.</P>",
+        "    <SCRIPT>",
+        "      window.ga = function () { ga.q.push(arguments) }; ga.q = []; ga.l = +new Date;",
+        "      ga('create', 'UA-XXXXX-Y', 'auto'); ga('send', 'pageview')",
+        "    </SCRIPT>",
+        '    <SCRIPT src="https://www.google-analytics.com/analytics.js" ASYNC DEFER></SCRIPT>',
+        "  </body>",
+        "</HTML>"
       ].join("\n");
     default:
       return "";

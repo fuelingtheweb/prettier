@@ -10,9 +10,17 @@ module.exports = [
   require("../language-js"),
   {
     parsers: {
-      // JS - Babylon
+      // JS - Babel
+      get babel() {
+        return eval("require")("../language-js/parser-babylon").parsers.babel;
+      },
+      get "babel-flow"() {
+        return eval("require")("../language-js/parser-babylon").parsers[
+          "babel-flow"
+        ];
+      },
       get babylon() {
-        return eval("require")("../language-js/parser-babylon").parsers.babylon;
+        return eval("require")("../language-js/parser-babylon").parsers.babel;
       },
       get json() {
         return eval("require")("../language-js/parser-babylon").parsers.json;
@@ -29,6 +37,14 @@ module.exports = [
         return eval("require")("../language-js/parser-babylon").parsers
           .__js_expression;
       },
+      get __vue_expression() {
+        return eval("require")("../language-js/parser-babylon").parsers
+          .__vue_expression;
+      },
+      get __vue_event_binding() {
+        return eval("require")("../language-js/parser-babylon").parsers
+          .__vue_event_binding;
+      },
       // JS - Flow
       get flow() {
         return eval("require")("../language-js/parser-flow").parsers.flow;
@@ -38,10 +54,32 @@ module.exports = [
         return eval("require")("../language-js/parser-typescript").parsers
           .typescript;
       },
+      /**
+       * TODO: Remove this old alias in a major version
+       */
       get "typescript-eslint"() {
-        return eval("require")("../language-js/parser-typescript").parsers[
-          "typescript-eslint"
-        ];
+        return eval("require")("../language-js/parser-typescript").parsers
+          .typescript;
+      },
+      // JS - Angular Action
+      get __ng_action() {
+        return eval("require")("../language-js/parser-angular").parsers
+          .__ng_action;
+      },
+      // JS - Angular Binding
+      get __ng_binding() {
+        return eval("require")("../language-js/parser-angular").parsers
+          .__ng_binding;
+      },
+      // JS - Angular Interpolation
+      get __ng_interpolation() {
+        return eval("require")("../language-js/parser-angular").parsers
+          .__ng_interpolation;
+      },
+      // JS - Angular Directive
+      get __ng_directive() {
+        return eval("require")("../language-js/parser-angular").parsers
+          .__ng_directive;
       }
     }
   },
@@ -105,22 +143,20 @@ module.exports = [
     }
   },
 
-  // HTML
   require("../language-html"),
   {
     parsers: {
-      get parse5() {
-        return eval("require")("../language-html/parser-parse5").parsers.parse5;
-      }
-    }
-  },
-
-  // Vue
-  require("../language-vue"),
-  {
-    parsers: {
+      // HTML
+      get html() {
+        return eval("require")("../language-html/parser-html").parsers.html;
+      },
+      // Vue
       get vue() {
-        return eval("require")("../language-vue/parser-vue").parsers.vue;
+        return eval("require")("../language-html/parser-html").parsers.vue;
+      },
+      // Angular
+      get angular() {
+        return eval("require")("../language-html/parser-html").parsers.angular;
       }
     }
   },

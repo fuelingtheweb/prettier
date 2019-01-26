@@ -3,6 +3,7 @@
 const privateUtil = require("../common/util");
 const embed = require("./embed");
 const pragma = require("./pragma");
+const preprocess = require("./preprocess");
 const {
   builders: {
     concat,
@@ -20,59 +21,38 @@ const {
   utils: { mapDoc },
   printer: { printDocToString }
 } = require("../doc");
-const { getOrderedListItemInfo } = require("./utils");
+const {
+  getFencedCodeBlockValue,
+  getOrderedListItemInfo,
+  splitText,
+  punctuationPattern,
+  INLINE_NODE_TYPES,
+  INLINE_NODE_WRAPPER_TYPES
+} = require("./utils");
+const { replaceEndOfLineWith } = require("../common/util");
 
 const TRAILING_HARDLINE_NODES = ["importExport"];
-
 const SINGLE_LINE_NODE_TYPES = ["heading", "tableCell", "link"];
-
 const SIBLING_NODE_TYPES = ["listItem", "definition", "footnoteDefinition"];
-
-const INLINE_NODE_TYPES = [
-  "liquidNode",
-  "inlineCode",
-  "emphasis",
-  "strong",
-  "delete",
-  "link",
-  "linkReference",
-  "image",
-  "imageReference",
-  "footnote",
-  "footnoteReference",
-  "sentence",
-  "whitespace",
-  "word",
-  "break"
-];
-
-const INLINE_NODE_WRAPPER_TYPES = INLINE_NODE_TYPES.concat([
-  "tableCell",
-  "paragraph",
-  "heading"
-]);
 
 function genericPrint(path, options, print) {
   const node = path.getValue();
 
   if (shouldRemainTheSameContent(path)) {
     return concat(
-      privateUtil
-        .splitText(
-          options.originalText.slice(
-            node.position.start.offset,
-            node.position.end.offset
-          ),
-          options
-        )
-        .map(
-          node =>
-            node.type === "word"
-              ? node.value
-              : node.value === ""
-                ? ""
-                : printLine(path, node.value, options)
-        )
+      splitText(
+        options.originalText.slice(
+          node.position.start.offset,
+          node.position.end.offset
+        ),
+        options
+      ).map(node =>
+        node.type === "word"
+          ? node.value
+          : node.value === ""
+          ? ""
+          : printLine(path, node.value, options)
+      )
     );
   }
 
@@ -95,12 +75,12 @@ function genericPrint(path, options, print) {
       return printChildren(path, options, print);
     case "word":
       return node.value
-        .replace(/[*]/g, "\\*") // escape all `*`
+        .replace(/[*$]/g, "\\$&") // escape all `*` and `$` (math)
         .replace(
           new RegExp(
             [
-              `(^|[${privateUtil.punctuationCharRange}])(_+)`,
-              `(_+)([${privateUtil.punctuationCharRange}]|$)`
+              `(^|${punctuationPattern})(_+)`,
+              `(_+)(${punctuationPattern}|$)`
             ].join("|"),
             "g"
           ),
@@ -205,7 +185,10 @@ function genericPrint(path, options, print) {
         const alignment = " ".repeat(4);
         return align(
           alignment,
-          concat([alignment, join(hardline, node.value.split("\n"))])
+          concat([
+            alignment,
+            concat(replaceEndOfLineWith(node.value, hardline))
+          ])
         );
       }
 
@@ -221,7 +204,12 @@ function genericPrint(path, options, print) {
         style,
         node.lang || "",
         hardline,
-        join(hardline, node.value.split("\n")),
+        concat(
+          replaceEndOfLineWith(
+            getFencedCodeBlockValue(node, options.originalText),
+            hardline
+          )
+        ),
         hardline,
         style
       ]);
@@ -240,9 +228,11 @@ function genericPrint(path, options, print) {
           ? node.value.trimRight()
           : node.value;
       const isHtmlComment = /^<!--[\s\S]*-->$/.test(value);
-      return replaceNewlinesWith(
-        value,
-        isHtmlComment ? hardline : markAsRoot(literalline)
+      return concat(
+        replaceEndOfLineWith(
+          value,
+          isHtmlComment ? hardline : markAsRoot(literalline)
+        )
       );
     }
     case "list": {
@@ -273,12 +263,12 @@ function genericPrint(path, options, print) {
               ? (index === 0
                   ? node.start
                   : isGitDiffFriendlyOrderedList
-                    ? 1
-                    : node.start + index) +
+                  ? 1
+                  : node.start + index) +
                 (nthSiblingIndex % 2 === 0 ? ". " : ") ")
               : nthSiblingIndex % 2 === 0
-                ? "- "
-                : "* ";
+              ? "- "
+              : "* ";
 
             return node.isAligned ||
               /* workaround for https://github.com/remarkjs/remark/issues/315 */ node.hasIndentedCodeblock
@@ -307,8 +297,8 @@ function genericPrint(path, options, print) {
         node.referenceType === "full"
           ? concat(["[", node.identifier, "]"])
           : node.referenceType === "collapsed"
-            ? "[]"
-            : ""
+          ? "[]"
+          : ""
       ]);
     case "imageReference":
       switch (node.referenceType) {
@@ -345,24 +335,37 @@ function genericPrint(path, options, print) {
       return concat(["[^", node.identifier, "]"]);
     case "footnoteDefinition": {
       const nextNode = path.getParentNode().children[path.getName() + 1];
+      const shouldInlineFootnote =
+        node.children.length === 1 &&
+        node.children[0].type === "paragraph" &&
+        (options.proseWrap === "never" ||
+          (options.proseWrap === "preserve" &&
+            node.children[0].position.start.line ===
+              node.children[0].position.end.line));
       return concat([
         "[^",
         node.identifier,
         "]: ",
-        group(
-          concat([
-            align(
-              " ".repeat(options.tabWidth),
-              printChildren(path, options, print, {
-                processor: (childPath, index) =>
-                  index === 0
-                    ? group(concat([softline, softline, childPath.call(print)]))
-                    : childPath.call(print)
-              })
-            ),
-            nextNode && nextNode.type === "footnoteDefinition" ? softline : ""
-          ])
-        )
+        shouldInlineFootnote
+          ? printChildren(path, options, print)
+          : group(
+              concat([
+                align(
+                  " ".repeat(options.tabWidth),
+                  printChildren(path, options, print, {
+                    processor: (childPath, index) =>
+                      index === 0
+                        ? group(
+                            concat([softline, softline, childPath.call(print)])
+                          )
+                        : childPath.call(print)
+                  })
+                ),
+                nextNode && nextNode.type === "footnoteDefinition"
+                  ? softline
+                  : ""
+              ])
+            )
       ]);
     }
     case "table":
@@ -374,11 +377,31 @@ function genericPrint(path, options, print) {
         ? concat(["  ", markAsRoot(literalline)])
         : concat(["\\", hardline]);
     case "liquidNode":
-      return replaceNewlinesWith(node.value, hardline);
+      return concat(replaceEndOfLineWith(node.value, hardline));
     // MDX
     case "importExport":
     case "jsx":
       return node.value; // fallback to the original text if multiparser failed
+    case "math":
+      return concat([
+        "$$",
+        hardline,
+        node.value
+          ? concat([
+              concat(replaceEndOfLineWith(node.value, hardline)),
+              hardline
+            ])
+          : "",
+        "$$"
+      ]);
+    case "inlineMath": {
+      // remark-math trims content but we don't want to remove whitespaces
+      // since it's very possible that it's recognized as math accidentally
+      return options.originalText.slice(
+        options.locStart(node),
+        options.locEnd(node)
+      );
+    }
 
     case "tableRow": // handled in "table"
     case "listItem": // handled in "list"
@@ -428,10 +451,6 @@ function getNthListSiblingIndex(node, parentNode) {
     parentNode,
     siblingNode => siblingNode.ordered === node.ordered
   );
-}
-
-function replaceNewlinesWith(str, doc) {
-  return join(doc, str.split("\n"));
 }
 
 function getNthSiblingIndex(node, parentNode, condition) {
@@ -485,8 +504,8 @@ function printLine(path, value, options) {
       ? line
       : " "
     : isBreakable
-      ? softline
-      : "";
+    ? softline
+    : "";
 }
 
 function printTable(path, options, print) {
@@ -829,10 +848,10 @@ function printTitle(title, options, printSpace) {
     singleCount > doubleCount
       ? '"'
       : doubleCount > singleCount
-        ? "'"
-        : options.singleQuote
-          ? "'"
-          : '"';
+      ? "'"
+      : options.singleQuote
+      ? "'"
+      : '"';
   title = title.replace(new RegExp(`(${quote})`, "g"), "\\$1");
   return `${quote}${title}${quote}`;
 }
@@ -863,7 +882,8 @@ function clean(ast, newObj, parent) {
   if (
     ast.type === "code" ||
     ast.type === "yaml" ||
-    ast.type === "importExport" ||
+    ast.type === "import" ||
+    ast.type === "export" ||
     ast.type === "jsx"
   ) {
     delete newObj.value;
@@ -873,10 +893,15 @@ function clean(ast, newObj, parent) {
     delete newObj.isAligned;
   }
 
-  // for whitespace: "\n" and " " are considered the same
-  if (ast.type === "whitespace" && ast.value === "\n") {
-    newObj.value = " ";
+  // texts can be splitted or merged
+  if (ast.type === "text") {
+    return null;
   }
+
+  if (ast.type === "inlineCode") {
+    newObj.value = ast.value.replace(/[ \t\n]+/g, " ");
+  }
+
   // for insert pragma
   if (
     parent &&
@@ -905,6 +930,7 @@ function hasPrettierIgnore(path) {
 }
 
 module.exports = {
+  preprocess,
   print: genericPrint,
   embed,
   massageAstNode: clean,
