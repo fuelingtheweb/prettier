@@ -5036,7 +5036,7 @@ function printMemberChain(path, options, print) {
   // If the last group is a function it's okay to inline if it fits.
   if (
     hasComment ||
-    callExpressions.length >= 5 ||
+    callExpressions.length >= 6 ||
     printedGroups.slice(0, -1).some(willBreak) ||
     /**
      *     scopes.filter(scope => scope.value !== '').map((scope, i) => {
